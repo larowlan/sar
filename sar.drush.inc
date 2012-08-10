@@ -18,7 +18,7 @@ function sar_drush_command() {
       'search' => dt('Existing text.'),
       'replace' => dt('Replacement text.'),
     ),
-    'bootstrap' => DRUSH_DRUPAL_BOOTSTRAP,
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,,
   );
 
   return $items;
@@ -30,7 +30,7 @@ function sar_drush_command() {
 function drush_sar_replace_validate() {
   $args = func_get_args();
   if (empty($args[1])) {
-    drush_set_error('NO_OLD_PATH', dt('You must specify paths to search & replace.'));
+    drush_set_error('NO_TEXT', dt('You must specify text to search & replace.'));
   }
 }
 
@@ -40,7 +40,7 @@ function drush_sar_replace_validate() {
 function drush_sar_replace() {
   list ($search, $repalce) = func_get_args();
 
-  drush_print(dt('Going perform a search & replace on all text fields in all bundles.'));
+  drush_print(dt('Going perform a search & replace on all text fields in all bundles and all custom blocks.'))
   drush_print(dt('  !search => !replace', array('!search' => $search, '!replace' => $replace)));
   drush_print(dt(' '));
 
@@ -88,6 +88,12 @@ function drush_sar_replace() {
       ->execute();
     drush_log(dt('  Updated @revision.', array('@revision' => format_plural($updated, '1 bundle revision', '@count bundle revisions'))), 'ok');
   }
+
+  // Do the blocks too.
+  $updated = db_update('block_custom')
+    ->expression('body', "REPLACE(body, :old, :new)", array(':old' => $old, ':new' => $new))
+    ->execute();
+  drush_log(dt('  Updated @block.', array('@block' => format_plural($updated, '1 custom block', '@count custom blocks'))), 'ok');
 
   return 1;
 }
