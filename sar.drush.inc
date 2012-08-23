@@ -18,7 +18,7 @@ function sar_drush_command() {
       'search' => dt('Existing text.'),
       'replace' => dt('Replacement text.'),
     ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,,
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
   );
 
   return $items;
@@ -38,9 +38,9 @@ function drush_sar_replace_validate() {
  * Command callback.
  */
 function drush_sar_replace() {
-  list ($search, $repalce) = func_get_args();
+  list ($search, $replace) = func_get_args();
 
-  drush_print(dt('Going perform a search & replace on all text fields in all bundles and all custom blocks.'))
+  drush_print(dt('Going perform a search & replace on all text fields in all bundles and all custom blocks.'));
   drush_print(dt('  !search => !replace', array('!search' => $search, '!replace' => $replace)));
   drush_print(dt(' '));
 
