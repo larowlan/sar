@@ -40,7 +40,7 @@ function drush_sar_replace_validate() {
 function drush_sar_replace() {
   list ($search, $replace) = func_get_args();
 
-  drush_print(dt('Going perform a search & replace on all text fields in all bundles and all custom blocks.'));
+  drush_print(dt('Going perform a search & replace on all text fields in all bundles and all custom blocks on @site', array('@site' => variable_get('site_name', 'Drupal'))));
   drush_print(dt('  !search => !replace', array('!search' => $search, '!replace' => $replace)));
   drush_print(dt(' '));
 
