@@ -56,6 +56,23 @@ function drush_sar_replace() {
     return 0;
   }
 
+  switch (drush_drupal_major_version()) {
+    case 7:
+      return _drush_sar_replace_d7($search, $replace);
+
+    case 6:
+      return _drush_sar_replace_d6($search, $replace);
+
+    default:
+      drush_log(dt('This version of Drupal is unsupported.'), 'error');
+      return 0;
+  }
+}
+
+/**
+ * Does the search and replace for Drupal 7 sites.
+ */
+function _drush_sar_replace_d7($search, $replace) {
   // Grab all defined fields, then cycle through them and run update queries.
   $fields = field_info_fields();
   foreach ($fields as $field) {
@@ -97,3 +114,44 @@ function drush_sar_replace() {
 
   return 1;
 }
+
+/**
+ * Does the search and replace for Drupal 6 sites.
+ */
+function _drush_sar_replace_d6($search, $replace) {
+  // Update all node revisions
+  drush_log(dt('Processing node revisions'), 'ok');
+  db_query("UPDATE {node_revisions} SET body = REPLACE(body, '%s', '%s'), teaser = REPLACE(teaser, '%s', '%s')",
+    $search, $replace, $search, $replace);
+  drush_log(dt('  Updated @revision.', array('@revision' => format_plural(db_affected_rows(), '1 node revision', '@count node revisions'))), 'ok');
+
+  // Do the blocks too.
+  drush_log(dt('Processing custom blocks'), 'ok');
+  db_query("UPDATE {boxes} SET body = REPLACE(body, '%s', '%s')", $search, $replace);
+  drush_log(dt('  Updated @block.', array('@block' => format_plural(db_affected_rows(), '1 custom block', '@count custom bocks'))), 'ok');
+
+  if (module_exists('content')) {
+    $types = content_types();
+
+    foreach ($types as $type) {
+      foreach ($type['fields'] as $field) {
+        if ($field['module'] != 'text' || !$field['db_storage']) {
+          continue;
+        }
+        $info = content_database_info($field);
+        $revision_table = $info['table'];
+        $column = isset($info['columns']['value']['column']) ? $info['columns']['value']['column'] : NULL;
+
+        if (!empty($column)) {
+          // Update data in the field revision table.
+          drush_log(dt('Processing field @name', array('@name' => $field['field_name'])), 'ok');
+          db_query("UPDATE {{$revision_table}} SET ${column} = REPLACE(${column}, '%s', '%s')", $search, $replace);
+          drush_log(dt('  Updated @revision.', array('@revision' => format_plural(db_affected_rows(), '1 field revision', '@count field revisions'))), 'ok');
+        }
+      }
+    }
+  }
+
+  return 1;
+}
+
