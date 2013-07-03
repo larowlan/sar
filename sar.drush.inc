@@ -36,6 +36,10 @@ function drush_sar_replace_validate() {
 
 /**
  * Command callback.
+ *
+ * This callback checks the version of Drupal it's operating on and runs an
+ * appropriate function to do the actual work. If an unsupported version is
+ * detected, it will exit.
  */
 function drush_sar_replace() {
   list ($search, $replace) = func_get_args();
@@ -130,6 +134,7 @@ function _drush_sar_replace_d6($search, $replace) {
   db_query("UPDATE {boxes} SET body = REPLACE(body, '%s', '%s')", $search, $replace);
   drush_log(dt('  Updated @block.', array('@block' => format_plural(db_affected_rows(), '1 custom block', '@count custom bocks'))), 'ok');
 
+  // Check if CCK is present and perform the replace on text fields.
   if (module_exists('content')) {
     $types = content_types();
 
@@ -154,4 +159,3 @@ function _drush_sar_replace_d6($search, $replace) {
 
   return 1;
 }
-
