@@ -27,8 +27,7 @@ function sar_drush_command() {
       'blocks' => dt('drush sar --blocks devel.example.com www.example.com'),
       'fields' => dt('drush sar --fields=field_name,field_other devel.example.com www.example.com'),
     ),
-    // 'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH,
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
   );
 
   return $items;
