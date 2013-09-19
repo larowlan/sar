@@ -64,7 +64,7 @@ function drush_sar_replace() {
   }
 
   drush_print(dt('Going perform a search & replace on all text fields in all bundles and all custom blocks on @site', array('@site' => variable_get('site_name', 'Drupal'))));
-  drush_print(dt('  !search => !replace', array('!search' => $options['search'], '!replace' => $search['replace'])));
+  drush_print(dt('  !search => !replace', array('!search' => $options['search'], '!replace' => $options['replace'])));
   drush_print(dt(' '));
 
   $continue = drush_confirm(dt('There is no undo. Have you just created a database backup?'));
@@ -87,7 +87,7 @@ function drush_sar_replace() {
       return _drush_sar_replace_d6($options);
 
     default:
-      drush_log(dt('This version of Drupal is unsupported.'), 'error');
+      drush_log(dt('This version of Drupal is not supported.'), 'error');
       return 0;
   }
 }
@@ -197,7 +197,7 @@ function _drush_sar_replace_d6($options) {
   if (empty($options['fields'])) {
     // Do the blocks too.
     drush_log(dt('Processing custom blocks'), 'ok');
-    db_query("UPDATE {boxes} SET body = REPLACE(body, '%s', '%s')", $search, $replace);
+    db_query("UPDATE {boxes} SET body = REPLACE(body, '%s', '%s')", $options['search'], $options['replace']);
     drush_log(dt('  Updated @block.', array('@block' => format_plural(db_affected_rows(), '1 custom block', '@count custom bocks'))), 'ok');
   }
 
