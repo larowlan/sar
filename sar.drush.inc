@@ -18,6 +18,7 @@ function sar_drush_command() {
       'blocks'  => dt('Only perform the search and replace on blocks.'),
       'bundles' => dt('Only perform the search and replace on these named bundles.'),
       'fields'  => dt('Only perform the search and replace on these named fields.'),
+      'dry-run' => dt('Only show which changes would be made, do not modify any data.'),
     ),
     'arguments' => array(
       'search'  => dt('Existing text.'),
@@ -66,20 +67,25 @@ function drush_sar_replace() {
     return 0;
   }
 
-  drush_print(dt('Going perform a search & replace on all text fields in all bundles and all custom blocks on @site', array('@site' => variable_get('site_name', 'Drupal'))));
+  drush_print(dt('Going to @operate a search & replace on all text fields in all bundles and all custom blocks on @site', array('@site' => variable_get('site_name', 'Drupal'), '@operate' => empty($options['dryrun']) ? 'perform' : 'fake')));
   drush_print(dt('  !search => !replace', array('!search' => $options['search'], '!replace' => $options['replace'])));
   drush_print(dt(' '));
 
-  $continue = drush_confirm(dt('There is no undo. Have you just created a database backup?'));
-  if (empty($continue)) {
-    drush_log(dt('Aborting'), 'warning');
-    return 0;
-  }
+  if (empty($options['dryrun'])) {
+    $continue = drush_confirm(dt('There is no undo. Have you just created a database backup?'));
+    if (empty($continue)) {
+      drush_log(dt('Aborting'), 'warning');
+      return 0;
+    }
 
-  $continue = drush_confirm(dt('There really is no undo. Are you sure this is what you want to do?'));
-  if (empty($continue)) {
-    drush_log(dt('Aborting'), 'warning');
-    return 0;
+    $continue = drush_confirm(dt('There really is no undo. Are you sure this is what you want to do?'));
+    if (empty($continue)) {
+      drush_log(dt('Aborting'), 'warning');
+      return 0;
+    }
+  }
+  else {
+    drush_log(dt('Doing a dry run'), 'warning');
   }
 
   switch (drush_drupal_major_version()) {
@@ -116,6 +122,9 @@ function drush_sar_parse_options() {
   // Check if we're processing blocks.
   $blocks = drush_get_option('blocks', 0);
 
+  // Doing a dry run?
+  $dryrun = drush_get_option('dry-run', 0);
+
   // The other CLI args.
   $args = drush_get_arguments();
   if (count($args) < 3) {
@@ -129,12 +138,13 @@ function drush_sar_parse_options() {
 
   // Return an array of options.
   return array(
-    'search' => $args[1],
+    'search'  => $args[1],
     'replace' => $args[2],
     'bundles' => $bundles,
-    'fields' => $fields,
-    'blocks' => $blocks,
-    'error' => $error,
+    'fields'  => $fields,
+    'blocks'  => $blocks,
+    'dryrun'  => $dryrun,
+    'error  ' => $error,
   );
 }
 
@@ -183,19 +193,29 @@ function _drush_sar_replace_d7($options) {
       drush_log(dt('Processing field @name (@bundles)', array('@name' => $field['field_name'], '@bundles' => implode(', ', $bundles))), 'ok');
 
       // Update data in FIELD_LOAD_CURRENT.
-      $query = db_update($data_table)
-        ->expression($column, "REPLACE(${column}, :search, :replace)", array(':search' => $options['search'], ':replace' => $options['replace']));
-      $query->condition('bundle', $bundles, 'IN');
+      if (empty($options['dryrun'])) {
+        $query = db_update($data_table)
+          ->expression($column, "REPLACE(${column}, :search, :replace)", array(':search' => $options['search'], ':replace' => $options['replace']));
+        $query->condition('bundle', $bundles, 'IN');
+        $updated = $query->execute();
+      }
+      else {
+        $updated = db_select($data_table, 'd')->fields('d', array('entity_id'))->condition($column, '%' . db_like($options['search']) . '%', 'LIKE')->execute()->rowCount();
+      }
 
-      $updated = $query->execute();
       drush_log(dt('  Updated @bundle.', array('@bundle' => format_plural($updated, '1 bundle', '@count bundles'))), 'ok');
 
       // Update data in FIELD_LOAD_REVISION.
-      $query = db_update($revision_table)
-        ->expression($column, "REPLACE(${column}, :search, :replace)", array(':search' => $options['search'], ':replace' => $options['replace']));
-      $query->condition('bundle', $bundles, 'IN');
+      if (empty($options['dryrun'])) {
+        $query = db_update($revision_table)
+          ->expression($column, "REPLACE(${column}, :search, :replace)", array(':search' => $options['search'], ':replace' => $options['replace']));
+        $query->condition('bundle', $bundles, 'IN');
+        $updated = $query->execute();
+      }
+      else {
+        $updated = db_select($revision_table, 'r')->fields('r', array('entity_id'))->condition($column, '%' . db_like($options['search']) . '%', 'LIKE')->execute()->rowCount();
+      }
 
-      $updated = $query->execute();
       drush_log(dt('  Updated @revision.', array('@revision' => format_plural($updated, '1 bundle revision', '@count bundle revisions'))), 'ok');
     }
   }
@@ -203,9 +223,14 @@ function _drush_sar_replace_d7($options) {
   // We process blocks if no fields were specified.
   if (empty($options['fields'])) {
     // Do the blocks too.
-    $updated = db_update('block_custom')
-      ->expression('body', "REPLACE(body, :old, :new)", array(':old' => $options['search'], ':new' => $options['replace']))
-      ->execute();
+    if (empty($options['dryrun'])) {
+      $updated = db_update('block_custom')
+        ->expression('body', "REPLACE(body, :old, :new)", array(':old' => $options['search'], ':new' => $options['replace']))
+        ->execute();
+    }
+    else {
+      $updated = db_select('block_custom', 'b')->fields('b', array('bid'))->condition('body', '%' . db_like($options['search']) . '%' , 'LIKE')->execute()->rowCount();
+    }
     drush_log(dt('  Updated @block.', array('@block' => format_plural($updated, '1 custom block', '@count custom blocks'))), 'ok');
   }
 
@@ -218,23 +243,42 @@ function _drush_sar_replace_d7($options) {
 function _drush_sar_replace_d6($options) {
   // Update all node revisions
   drush_log(dt('Processing node revisions'), 'ok');
-  $query = "UPDATE {node_revisions} SET body = REPLACE(body, '%s', '%s'), teaser = REPLACE(teaser, '%s', '%s')";
-  $args = array($options['search'], $options['replace'], $options['search'], $options['replace']);
+  if (empty($options['dryrun'])) {
+    $query = "UPDATE {node_revisions} r INNER JOIN {node n} ON (r.nid = n.nid) SET r.body = REPLACE(r.body, '%s', '%s'), r.teaser = REPLACE(r.teaser, '%s', '%s')";
+    $args  = array($options['search'], $options['replace'], $options['search'], $options['replace']);
+  }
+  else {
+    $query = "SELECT COUNT(r.vid) FROM {node_revisions} r INNER JOIN {node n} ON (r.nid = n.nid) WHERE r.body LIKE '%%%s%%' OR r.teaser LIKE '%%%s%%'";
+    $args  = array($options['search'], $options['search']);
+  }
 
   // If we've limited the node types...
   if (!empty($options['bundles'])) {
-    $query .= " WHERE type in (" . db_placeholders($options['bundles'], 'varchar') .")";
-    $args = array_merge($args, $options['bundles']);
+    $query .= " AND n.type in (" . db_placeholders($options['bundles'], 'varchar') .")";
+    $args   = array_merge($args, $options['bundles']);
   }
 
-  // db_query($query, $args);
-  drush_log(dt('  Updated @revision.', array('@revision' => format_plural(db_affected_rows(), '1 node revision', '@count node revisions'))), 'ok');
+  $result = db_query($query, $args);
+  if (empty($options['dryrun'])) {
+    $count = db_affected_rows();
+  }
+  else {
+    $count = db_result($result);
+  }
+
+  drush_log(dt('  Updated @revision.', array('@revision' => format_plural($count, '1 node revision', '@count node revisions'))), 'ok');
 
   if (empty($options['fields']) && empty($options['bundles'])) {
     // Do the blocks too.
     drush_log(dt('Processing custom blocks'), 'ok');
-    db_query("UPDATE {boxes} SET body = REPLACE(body, '%s', '%s')", $options['search'], $options['replace']);
-    drush_log(dt('  Updated @block.', array('@block' => format_plural(db_affected_rows(), '1 custom block', '@count custom bocks'))), 'ok');
+    if (empty($options['dryrun'])) {
+      db_query("UPDATE {boxes} SET body = REPLACE(body, '%s', '%s')", $options['search'], $options['replace']);
+      $count = db_affected_rows();
+    }
+    else {
+      $count = db_result(db_query("SELECT COUNT(bid) FROM {boxes} WHERE body LIKE '%%%s%%'", $options['search']));
+    }
+    drush_log(dt('  Updated @block.', array('@block' => format_plural($count, '1 custom block', '@count custom bocks'))), 'ok');
   }
 
   // Check if CCK is present and perform the replace on text fields (assuming we didn't just want blocks).
@@ -265,13 +309,23 @@ function _drush_sar_replace_d6($options) {
           // Update data in the field revision table.
           drush_log(dt('Processing field @name in @type', array('@name' => $field['field_name'], '@type' => $type['name'])), 'ok');
 
-          $query = "UPDATE {${revision_table}} r";
-          if (!empty($options['bundles'])) {
-            // If we need to the node type...
-            $query .= " INNER JOIN {node} n ON (r.nid = n.nid)";
+          if (empty($options['dryrun'])) {
+            $query = "UPDATE {${revision_table}} r";
+            if (!empty($options['bundles'])) {
+              // If we need to the node type...
+              $query .= " INNER JOIN {node} n ON (r.nid = n.nid)";
+            }
+            $query .= " SET r.${column} = REPLACE(r.${column}, '%s', '%s')";
+            $args = array($options['search'], $options['replace']);
           }
-          $query .= " SET r.${column} = REPLACE(r.${column}, '%s', '%s')";
-          $args = array($options['search'], $options['replace']);
+          else {
+            $query = "SELECT COUNT(r.vid) FROM {${revision_table}} r";
+            if (!empty($options['bundles'])) {
+              // If we need to the node type...
+              $query .= " INNER JOIN {node} n ON (r.nid = n.nid)";
+            }
+            $args = array();
+          }
 
           if (!empty($options['bundles'])) {
             // Limit the current query to the current node type, which is $type['type'].
@@ -279,7 +333,14 @@ function _drush_sar_replace_d6($options) {
             $args[] = $type['type'];
           }
 
-          drush_log(dt('  Updated @revision.', array('@revision' => format_plural(db_affected_rows(), '1 field revision', '@count field revisions'))), 'ok');
+          if (empty($options['dryrun'])) {
+            db_query($query, $args);
+            $count = db_affected_rows();
+          }
+          else {
+            $count = db_result(db_query($query, $args));
+          }
+          drush_log(dt('  Updated @revision.', array('@revision' => format_plural($count, '1 field revision', '@count field revisions'))), 'ok');
         }
       }
     }
