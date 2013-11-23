@@ -30,6 +30,7 @@ function sar_drush_command() {
       'bundles'  => dt('drush sar --bundles=page,article devel.example.com www.example.com'),
       'fields'   => dt('drush sar --fields=field_name,field_other devel.example.com www.example.com'),
       'complex'  => dt('drush sar --bundles=article --fields=field_name,field_other devel.example.com www.example.com'),
+      'dry run'  => dt('drush sar --dry-run devel.example.com www.example.com'),
     ),
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
   );
