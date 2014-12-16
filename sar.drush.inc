@@ -94,19 +94,28 @@ function _drush_sar_replace_d7($search, $replace) {
     foreach ($field['bundles'] as $entity => $bundle) {
       $bundles += array_values($bundle);
     }
-
     drush_log(dt('Processing field @name (@bundles)', array('@name' => $field['field_name'], '@bundles' => implode(', ', $bundles))), 'ok');
 
     // Update data in FIELD_LOAD_CURRENT.
-    $updated = db_update($data_table)
-      ->expression($column, "REPLACE(${column}, :search, :replace)", array(':search' => $search, ':replace' => $replace))
-      ->execute();
+    $query = db_update($data_table)
+      ->expression($column, "REPLACE(${column}, :search, :replace)", array(':search' => $search, ':replace' => $replace));
+    // Replace values in summary columns as well.
+    if ($field['type'] == 'text_with_summary') {
+      $summary_column = _field_sql_storage_columnname($field['field_name'], 'summary');
+      $query->expression($summary_column, "REPLACE(${summary_column}, :search, :replace)", array(':search' => $search, ':replace' => $replace));
+    }
+    $updated = $query->execute();
     drush_log(dt('  Updated @bundle.', array('@bundle' => format_plural($updated, '1 bundle', '@count bundles'))), 'ok');
 
     // Update data in FIELD_LOAD_REVISION.
-    $updated = db_update($revision_table)
-      ->expression($column, "REPLACE(${column}, :search, :replace)", array(':search' => $search, ':replace' => $replace))
-      ->execute();
+    $query = db_update($revision_table)
+      ->expression($column, "REPLACE(${column}, :search, :replace)", array(':search' => $search, ':replace' => $replace));
+    // Replace values in summary columns as well.
+    if ($field['type'] == 'text_with_summary') {
+      $summary_column = _field_sql_storage_columnname($field['field_name'], 'summary');
+      $query->expression($summary_column, "REPLACE(${summary_column}, :search, :replace)", array(':search' => $search, ':replace' => $replace));
+    }
+    $updated = $query->execute();
     drush_log(dt('  Updated @revision.', array('@revision' => format_plural($updated, '1 bundle revision', '@count bundle revisions'))), 'ok');
   }
 
