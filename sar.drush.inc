@@ -190,6 +190,9 @@ function _drush_sar_replace_d7($options) {
       $data_table = _field_sql_storage_tablename($field);
       $revision_table = _field_sql_storage_revision_tablename($field);
       $column = _field_sql_storage_columnname($field['field_name'], 'value');
+      if ($field['type'] == 'text_with_summary') {
+        $summary_column = _field_sql_storage_columnname($field['field_name'], 'summary');
+      }
 
       drush_log(dt('Processing field @name (@bundles)', array('@name' => $field['field_name'], '@bundles' => implode(', ', $bundles))), 'ok');
 
@@ -197,11 +200,20 @@ function _drush_sar_replace_d7($options) {
       if (empty($options['dryrun'])) {
         $query = db_update($data_table)
           ->expression($column, "REPLACE(${column}, :search, :replace)", array(':search' => $options['search'], ':replace' => $options['replace']));
+        // Replace values in summary columns as well.
+        if ($field['type'] == 'text_with_summary') {
+          $query->expression($summary_column, "REPLACE(${summary_column}, :search, :replace)", array(':search' => $options['search'], ':replace' => $options['replace']));
+        }
         $query->condition('bundle', $bundles, 'IN');
         $updated = $query->execute();
       }
       else {
-        $updated = db_select($data_table, 'd')->fields('d', array('entity_id'))->condition($column, '%' . db_like($options['search']) . '%', 'LIKE')->execute()->rowCount();
+        $or = db_or();
+        $or->condition($column, '%' . db_like($options['search']) . '%', 'LIKE');
+        if ($field['type'] == 'text_with_summary') {
+          $or->condition($summary_column, '%' . db_like($options['search']) . '%', 'LIKE');
+        }
+        $updated = db_select($data_table, 'd')->fields('d', array('entity_id'))->condition($or)->execute()->rowCount();
       }
 
       drush_log(dt('  Updated @bundle.', array('@bundle' => format_plural($updated, '1 bundle', '@count bundles'))), 'ok');
@@ -210,11 +222,20 @@ function _drush_sar_replace_d7($options) {
       if (empty($options['dryrun'])) {
         $query = db_update($revision_table)
           ->expression($column, "REPLACE(${column}, :search, :replace)", array(':search' => $options['search'], ':replace' => $options['replace']));
+        // Replace values in summary columns as well.
+        if ($field['type'] == 'text_with_summary') {
+          $query->expression($summary_column, "REPLACE(${summary_column}, :search, :replace)", array(':search' => $options['search'], ':replace' => $options['replace']));
+        }
         $query->condition('bundle', $bundles, 'IN');
         $updated = $query->execute();
       }
       else {
-        $updated = db_select($revision_table, 'r')->fields('r', array('entity_id'))->condition($column, '%' . db_like($options['search']) . '%', 'LIKE')->execute()->rowCount();
+        $or = db_or();
+        $or->condition($column, '%' . db_like($options['search']) . '%', 'LIKE');
+        if ($field['type'] == 'text_with_summary') {
+          $or->condition($summary_column, '%' . db_like($options['search']) . '%', 'LIKE');
+        }
+        $updated = db_select($revision_table, 'r')->fields('r', array('entity_id'))->condition($or)->execute()->rowCount();
       }
 
       drush_log(dt('  Updated @revision.', array('@revision' => format_plural($updated, '1 bundle revision', '@count bundle revisions'))), 'ok');
