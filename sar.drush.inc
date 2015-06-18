@@ -15,22 +15,24 @@ function sar_drush_command() {
     'callback' => 'drush_sar_replace',
     'description' => dt('Replace strings in text fields in all content.'),
     'options' => array(
-      'blocks'  => dt('Only perform the search and replace on blocks.'),
-      'bundles' => dt('Only perform the search and replace on these named bundles.'),
-      'fields'  => dt('Only perform the search and replace on these named fields.'),
-      'dry-run' => dt('Only show which changes would be made, do not modify any data.'),
+      'blocks'   => dt('Only perform the search and replace on blocks.'),
+      'bundles'  => dt('Only perform the search and replace on these named bundles.'),
+      'fields'   => dt('Only perform the search and replace on these named fields.'),
+      'dry-run'  => dt('Only show which changes would be made, do not modify any data.'),
+      'show-ids' => dt('Show IDs of the entities that would be changed (Forces dry-run to ON).'),
     ),
     'arguments' => array(
       'search'  => dt('Existing text.'),
       'replace' => dt('Replacement text.'),
     ),
     'examples' => array(
-      'simple'   => dt('drush sar devel.example.com www.example.com'),
-      'blocks'   => dt('drush sar --blocks devel.example.com www.example.com'),
-      'bundles'  => dt('drush sar --bundles=page,article devel.example.com www.example.com'),
-      'fields'   => dt('drush sar --fields=field_name,field_other devel.example.com www.example.com'),
-      'complex'  => dt('drush sar --bundles=article --fields=field_name,field_other devel.example.com www.example.com'),
-      'dry run'  => dt('drush sar --dry-run devel.example.com www.example.com'),
+      'simple'    => dt('drush sar devel.example.com www.example.com'),
+      'blocks'    => dt('drush sar --blocks devel.example.com www.example.com'),
+      'bundles'   => dt('drush sar --bundles=page,article devel.example.com www.example.com'),
+      'fields'    => dt('drush sar --fields=field_name,field_other devel.example.com www.example.com'),
+      'complex'   => dt('drush sar --bundles=article --fields=field_name,field_other devel.example.com www.example.com'),
+      'dry run'   => dt('drush sar --dry-run devel.example.com www.example.com'),
+      'show ids'  => dt('drush sar --show-ids devel.example.com www.example.com'),
     ),
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
   );
@@ -126,6 +128,10 @@ function drush_sar_parse_options() {
   // Doing a dry run?
   $dryrun = drush_get_option('dry-run', 0);
 
+  // Showing IDs?
+  $showid = drush_get_option('show-ids', 0);
+  if ($showid) $dryrun = 1;
+
   // The other CLI args.
   $args = drush_get_arguments();
   if (count($args) < 3) {
@@ -145,6 +151,7 @@ function drush_sar_parse_options() {
     'fields'  => $fields,
     'blocks'  => $blocks,
     'dryrun'  => $dryrun,
+    'showid'  => $showid,
     'error  ' => $error,
   );
 }
@@ -213,10 +220,22 @@ function _drush_sar_replace_d7($options) {
         if ($field['type'] == 'text_with_summary') {
           $or->condition($summary_column, '%' . db_like($options['search']) . '%', 'LIKE');
         }
-        $updated = db_select($data_table, 'd')->fields('d', array('entity_id'))->condition($or)->execute()->rowCount();
+        if (empty($options['showid'])) {
+          $updated = db_select($data_table, 'd')->fields('d', array('entity_id'))->condition($or)->execute()->rowCount();
+        }
+        else {
+          $updated = db_select($data_table, 'd')->fields('d', array('entity_type', 'entity_id'))->condition($or)->execute();
+        }
       }
 
-      drush_log(dt('  Updated @bundle.', array('@bundle' => format_plural($updated, '1 bundle', '@count bundles'))), 'ok');
+      if (!empty($options['showid'])) {
+        foreach ($updated as $row) {
+          drush_print(dt('@entity/@id', array('@entity' => $row->entity_type, '@id' => $row->entity_id)));
+        }
+      }
+      else {
+        drush_log(dt('  Updated @bundle.', array('@bundle' => format_plural($updated, '1 bundle', '@count bundles'))), 'ok');
+      }
 
       // Update data in FIELD_LOAD_REVISION.
       if (empty($options['dryrun'])) {
@@ -229,7 +248,7 @@ function _drush_sar_replace_d7($options) {
         $query->condition('bundle', $bundles, 'IN');
         $updated = $query->execute();
       }
-      else {
+      else if (empty($options['showid'])) { // Only run showid on current revisions.
         $or = db_or();
         $or->condition($column, '%' . db_like($options['search']) . '%', 'LIKE');
         if ($field['type'] == 'text_with_summary') {
@@ -251,9 +270,22 @@ function _drush_sar_replace_d7($options) {
         ->execute();
     }
     else {
-      $updated = db_select('block_custom', 'b')->fields('b', array('bid'))->condition('body', '%' . db_like($options['search']) . '%' , 'LIKE')->execute()->rowCount();
+      if (empty($options['showid'])) {
+        $updated = db_select('block_custom', 'b')->fields('b', array('bid'))->condition('body', '%' . db_like($options['search']) . '%' , 'LIKE')->execute()->rowCount();
+      }
+      else {
+        $updated = db_select('block_custom', 'b')->fields('b', array('bid'))->condition('body', '%' . db_like($options['search']) . '%' , 'LIKE')->execute();
+      }
     }
-    drush_log(dt('  Updated @block.', array('@block' => format_plural($updated, '1 custom block', '@count custom blocks'))), 'ok');
+
+    if (!empty($options['showid'])) {
+      foreach ($updated as $row) {
+        drush_print(dt('block/@bid', array('@bid' => $row->bid)));
+      }
+    }
+    else {
+      drush_log(dt('  Updated @block.', array('@block' => format_plural($updated, '1 custom block', '@count custom blocks'))), 'ok');
+    }
   }
 
   return 1;
