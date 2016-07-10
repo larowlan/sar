@@ -1,0 +1,4 @@
+name: Drush Search & Replace
+type: module
+description: "This drush plugin performs a text search & replace on all content and content revisions in all text fields in a Drupal site."
+core: 8.x
