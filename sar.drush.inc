@@ -261,16 +261,18 @@ function _drush_sar_replace_d8($options) {
       $updated = $query->execute();
     }
     else {
+      $in = new Condition('IN');
+      $in->condition('bundle', $bundles, 'IN');
       $or = new Condition('OR');
       $or->condition($column, '%' . $connection->escapeLike($options['search']) . '%', 'LIKE');
       if ($field['type'] == 'text_with_summary') {
         $or->condition($summary_column, '%' . $connection->escapeLike($options['search']) . '%', 'LIKE');
       }
       if (empty($options['showid'])) {
-        $updated = $connection->select($data_table, 'd')->fields('d', array('entity_id'))->condition($or)->execute()->rowCount();
+        $updated = $connection->select($data_table)->condition($in)->condition($or)->countQuery()->execute()->fetchField();
       }
       else {
-        $updated = $connection->select($data_table, 'd')->fields('d', array('entity_id'))->condition($or)->execute();
+        $updated = $connection->select($data_table, 'd')->fields('d', array('entity_id'))->condition($in)->condition($or)->execute();
       }
     }
 
@@ -298,12 +300,14 @@ function _drush_sar_replace_d8($options) {
     }
     elseif (empty($options['showid'])) {
       // Only run showid on current revisions.
+      $in = new Condition('IN');
+      $in->condition('bundle', $bundles, 'IN');
       $or = new Condition('OR');
       $or->condition($column, '%' . $connection->escapeLike($options['search']) . '%', 'LIKE');
       if ($field['type'] == 'text_with_summary') {
         $or->condition($summary_column, '%' . $connection->escapeLike($options['search']) . '%', 'LIKE');
       }
-      $updated = $connection->select($revision_table, 'r')->fields('r', array('entity_id'))->condition($or)->execute()->rowCount();
+      $updated = $connection->select($revision_table)->condition($in)->condition($or)->countQuery()->execute()->fetchField();
     }
 
     drush_log(dt('  Updated @revision.', array(
